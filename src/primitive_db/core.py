@@ -1,11 +1,11 @@
-from primitive_db import utils
+from primitive_db import parser, utils
 from primitive_db.constants import AVAILABLE_TYPES, ID_COLUMN
 
 
-def create_table(metadata:dict, table_name:str, columns:list[dict]):
-    
+def create_table(metadata: dict, table_name: str, columns: list[dict]):
+
     if table_name in metadata:
-        raise ValueError(f"Ошибка: Таблица \"{table_name}\" уже существует!")
+        raise ValueError(f'Ошибка: Таблица "{table_name}" уже существует!')
 
     errors = []
     need_id = True
@@ -15,12 +15,12 @@ def create_table(metadata:dict, table_name:str, columns:list[dict]):
             need_id = False
             id_index = i
             if column["type"] != ID_COLUMN["type"]:
-                value_repr = f'{column["name"]}:{column["type"]}'
+                value_repr = f"{column['name']}:{column['type']}"
                 errors.append(utils.wrong_value_message(value_repr))
                 continue
 
         if column["type"] not in AVAILABLE_TYPES:
-            value_repr = f'{column["name"]}:{column["type"]}'
+            value_repr = f"{column['name']}:{column['type']}"
             errors.append(utils.wrong_value_message(value_repr))
 
     if errors:
@@ -35,16 +35,112 @@ def create_table(metadata:dict, table_name:str, columns:list[dict]):
 
     return metadata
 
-def drop_table(metadata:dict, table_name:str) -> dict:
-    
+
+def drop_table(metadata: dict, table_name: str) -> dict:
+
     if table_name not in metadata:
-        raise ValueError(f"Ошибка: Таблица \"{table_name}\" не существует!")
+        raise ValueError(utils.table_not_found_error(table_name))
 
     metadata.pop(table_name)
 
     return metadata
 
-def print_list_of_tables(metadata:dict) -> None:
-    
+
+def print_list_of_tables(metadata: dict) -> None:
+
     for key in metadata:
         print(f"- {key}")
+
+
+def insert(
+    metadata: dict, table_name: str, table_data: list[dict], values: list
+) -> list[dict]:
+
+    if table_name not in metadata:
+        raise ValueError(utils.table_not_found_error(table_name))
+
+    table_metadata = metadata[table_name]
+    if len(values) != len(table_metadata) - 1:
+        raise ValueError(
+            "Ошибка. Указано неверное количество значений. "
+            "Для вставки необходимо указать значения для всех полей. Попробуйте снова."
+        )
+
+    table_row = {}
+    errors = []
+    for column_meta, column_value in zip(table_metadata[1:], values):
+        try:
+            typed_value = parser.convert_value(column_value, column_meta["type"])
+        except ValueError as exc:
+            if not exc.args:
+                error_text = (
+                    f"Не удалось привести значение {column_value!r} "
+                    "к типу {column_meta['type']!r}"
+                )
+            else:
+                error_text = str(exc)
+
+            errors.append(error_text)
+            continue
+
+        table_row[column_meta] = typed_value
+
+    if errors:
+        raise ValueError("\n".join(errors))
+
+    table_row[ID_COLUMN["name"]] = len(table_data) + 1
+
+    table_data.append(table_row)
+
+    return table_data
+
+
+def select(table_data: list[dict], where_clause: dict) -> list[dict]:
+
+    if not where_clause:
+        return table_data
+
+    result = [
+        row
+        for row in table_data
+        if all(row.get(key) == value for key, value in where_clause.items())
+    ]
+    return result
+
+
+def update(table_data: list[dict], set_clause: dict, where_clause: dict) -> list[dict]:
+
+    rows_for_update = select(table_data, where_clause)
+    for row in rows_for_update:
+        row.update(set_clause)
+
+    return rows_for_update
+
+
+def delete(table_data: list[dict], where_clause: dict) -> list[dict]:
+
+    ids_delete_rows = set(id(row) for row in select(table_data, where_clause))
+    i = len(table_data)
+    while i > 0:
+        if not ids_delete_rows:
+            break
+
+        i -= 1
+        row_id = id(table_data[i])
+        if row_id in ids_delete_rows:
+            table_data.pop(i)
+            ids_delete_rows.discard(row_id)
+
+    return table_data
+
+def print_info(table_name:str, metadata:dict, table_data:list[dict]) -> None:
+    
+    if table_name not in metadata:
+        raise ValueError(utils.table_not_found_error(table_name))     
+
+    print(f"Таблица: {table_name}")
+    columns_pepr = ", ".join(
+        f'{column["name"]}:{column["type"]}' for column in metadata[table_name]
+        )
+    print(f"Стоблцы: {columns_pepr}")
+    print(f"Количество записей {len(table_data)}")
