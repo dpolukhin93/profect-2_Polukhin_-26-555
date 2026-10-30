@@ -133,14 +133,15 @@ def delete(table_data: list[dict], where_clause: dict) -> list[dict]:
 
     return table_data
 
-def print_info(table_name:str, metadata:dict, table_data:list[dict]) -> None:
-    
+
+def print_info(table_name: str, metadata: dict, table_data: list[dict]) -> None:
+
     if table_name not in metadata:
-        raise ValueError(utils.table_not_found_error(table_name))     
+        raise ValueError(utils.table_not_found_error(table_name))
 
     print(f"Таблица: {table_name}")
     columns_pepr = ", ".join(
-        f'{column["name"]}:{column["type"]}' for column in metadata[table_name]
-        )
+        f"{column['name']}:{column['type']}" for column in metadata[table_name]
+    )
     print(f"Стоблцы: {columns_pepr}")
     print(f"Количество записей {len(table_data)}")

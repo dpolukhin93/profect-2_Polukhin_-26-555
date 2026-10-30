@@ -1,6 +1,7 @@
 import shlex
 
-import prompt, prettytable
+import prettytable
+import prompt
 
 from primitive_db import core, parser, utils
 from primitive_db.constants import METADATA_PATH
@@ -72,101 +73,110 @@ def run():
                 table_data = utils.load_table_data(table_name)
                 values = args[4:]
 
-                #проверим секцию values и очистим ее от служебных символов
+                # проверим секцию values и очистим ее от служебных символов
                 raise_syntax_error = False
-                if not values[0].startswith('('):
+                if not values[0].startswith("("):
                     raise_syntax_error = True
-                if not values[-1].endswith(')'):
-                    raise_syntax_error = True
-               
-                values[0] = values[0].removeprefix('(')
-                values[-1] = values[-1].removesuffix(')')
-   
-                if values[-1].endswith(','):
+                if not values[-1].endswith(")"):
                     raise_syntax_error = True
 
-                for i, value  in enumerate(values[:len(values)-1]):
-                    if not value.endswith(','):
+                values[0] = values[0].removeprefix("(")
+                values[-1] = values[-1].removesuffix(")")
+
+                if values[-1].endswith(","):
+                    raise_syntax_error = True
+
+                for i, value in enumerate(values[: len(values) - 1]):
+                    if not value.endswith(","):
                         raise_syntax_error = True
                         continue
-                    values[i] = value.removesuffix(',')
-                
+                    values[i] = value.removesuffix(",")
+
                 if raise_syntax_error:
                     raise SyntaxError(syntax_error_text)
 
                 table_data = core.insert(metadata, table_name, table_data, values)
                 utils.save_table_data(table_name, table_data)
-                print(f"Запись с ID = {table_data[-1]["ID"]} "
-                      "успешно добавлена в таблицу {table_name}.")
+                print(
+                    f"Запись с ID = {table_data[-1]['ID']} "
+                    "успешно добавлена в таблицу {table_name}."
+                )
             elif command == "select":
-               raise_syntax_error = False
-               filtration = False
-               if args_len < 3 or args[1] != "from":
-                  raise_syntax_error = True
-               if args_len > 4:
-                filtration = True
-                if args[3] != "where":
-                   raise_syntax_error = True
+                raise_syntax_error = False
+                filtration = False
+                if args_len < 3 or args[1] != "from":
+                    raise_syntax_error = True
+                if args_len > 4:
+                    filtration = True
+                    if args[3] != "where":
+                        raise_syntax_error = True
 
-               if raise_syntax_error:
-                  raise SyntaxError(syntax_error_text)
-               
-               table_name = args[2]
-               table_data = utils.load_table_data(table_name)
-               
-               if filtration:
-                   where_clause = parser.parse_clause(args[4:])
-               else:
-                   where_clause = {}
+                if raise_syntax_error:
+                    raise SyntaxError(syntax_error_text)
 
-                   result = core.select(table_data, where_clause)
-                   pretty_print(result)
+                table_name = args[2]
+                table_data = utils.load_table_data(table_name)
 
-            elif command =="update":
-                
+                if filtration:
+                    where_clause = parser.parse_clause(args[4:])
+                else:
+                    where_clause = {}
+
+                    result = core.select(table_data, where_clause)
+                    if result:
+                        pretty_print(result)
+                    else:
+                        print("Отсутствуют записи, удовлетворяющие условию запроса")
+
+            elif command == "update":
                 if args_len < 10 or args[2] != "set" or "where" not in args:
                     raise SyntaxError(syntax_error_text)
 
                 table_name = args[1]
                 where_position = args.index("where")
                 if args_len - where_position < 3:
-                    raise ValueError("Не задано условие в секции \"where\"")
-                
-                table_data = utils.load_table_data(table_name)
-                tokens_for_parsing = args[3:where_position - 1]
-                set_clause = parser.parse_clause(metadata, 
-                                                 table_name, 
-                                                 tokens_for_parsing, 
-                                                 "set"
-                                                )
+                    raise ValueError('Не задано условие в секции "where"')
 
-                tokens_for_parsing = args[where_position + 1:]
-                where_clause = parser.parse_clause(metadata, 
-                                                   table_name, 
-                                                   tokens_for_parsing
-                                                )
+                table_data = utils.load_table_data(table_name)
+                tokens_for_parsing = args[3 : where_position - 1]
+                set_clause = parser.parse_clause(
+                    metadata, table_name, tokens_for_parsing, "set"
+                )
+
+                tokens_for_parsing = args[where_position + 1 :]
+                where_clause = parser.parse_clause(
+                    metadata, table_name, tokens_for_parsing
+                )
 
                 updated_rows = core.update(table_data, set_clause, where_clause)
                 for row in updated_rows:
-                    print(f'Запись с ID = {row["ID"]} в таблице {table_name!r} успешно обновлена')
+                    print(
+                        f"Запись с ID = {row['ID']} в таблице {table_name!r} "
+                        "успешно обновлена"
+                    )
 
                 utils.save_table_data(table_name, table_data)
 
-            elif command =="delete":
+            elif command == "delete":
                 if args_len < 7 or args[1] != "from" or args[3] != "where":
                     raise SyntaxError(syntax_error_text)
-                           
+
                 table_name = args[2]
                 table_data = utils.load_table_data(table_name)
                 where_clause = parser.parse_clause(args[4:])
 
                 if not where_clause:
                     raise ValueError("Не задано условие в секции where")
-                
+
                 result = core.delete(table_data, where_clause)
-                deleted_rows_repr = ", ".join(f"{key} = {value}" for key, value in where_clause.items)
-                print(f'Запись с {deleted_rows_repr} успешно удалена из таблицы {table_name!r}')           
-            
+                deleted_rows_repr = ", ".join(
+                    f"{key} = {value}" for key, value in where_clause.items
+                )
+                print(
+                    f"Запись с {deleted_rows_repr} успешно удалена из "
+                     f"таблицы {table_name!r}"
+                )
+
             elif command == "info":
                 if args_len < 2:
                     raise SyntaxError(syntax_error_text)
@@ -174,7 +184,7 @@ def run():
                 table_name = args[1]
                 table_data = utils.load_table_data(table_name)
                 core.print_info(table_name, metadata, table_data)
-                       
+
             elif command == "list_tables":
                 core.print_list_of_tables(metadata)
             elif command == "exit":
@@ -227,5 +237,9 @@ def print_help():
     print("<command> help - справочная информация\n")
 
 
-def pretty_print(table_data):
-
+def pretty_print(table_data: list[dict]):
+    pretty_table = prettytable.PrettyTable()
+    columns = list(table_data[0].keys())
+    pretty_table.field_names = columns
+    for row in table_data:
+        pretty_table.add_row([row[column] for column in columns])
