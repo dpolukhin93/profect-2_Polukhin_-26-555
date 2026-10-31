@@ -201,7 +201,7 @@ def command_insert(metadata:dict, args:list[str], args_len:int):
 
     print(
                     f"Запись с ID={table_data[-1]['ID']} "
-                    "успешно добавлена в таблицу {table_name}."
+                    f"успешно добавлена в таблицу {table_name}."
                 )
 
 
