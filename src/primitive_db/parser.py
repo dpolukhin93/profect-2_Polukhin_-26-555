@@ -1,12 +1,15 @@
+from primitive_db import decorators
 from primitive_db.constants import AVAILABLE_TYPES
 
 
+@decorators.handle_db_errors
 def parse_clause(
     metadata: dict,
     table_name: str,
     clause_tokens: list[str],
     clause_type: str = "where",
 ) -> dict:
+    """Разбирает пользовательский ввод для выражений set и where."""
 
     table_metadata = metadata[table_name]
     awaited_format = "Ожидается запись вида <столбец> = <значение>"
@@ -60,6 +63,7 @@ def parse_clause(
 
 
 def convert_value(value: str, target_type: str) -> int | str | bool:
+    """Приводит переданное значение к целевому типу из метаданных"""
 
     if target_type == AVAILABLE_TYPES[0]:  # bool
         lower_value = value.strip().lower()
@@ -82,3 +86,58 @@ def convert_value(value: str, target_type: str) -> int | str | bool:
 
     # некорректное значение (не прошло проверки выше)
     raise ValueError
+
+def parse_insert_values(values:list[str]):
+    """Проверяет массив токенов на соответствие (Значение1, Значение2, Значение3).
+    Убирает обрамляющие скобки и запятые между значениями.
+    Токены между кавычками склеивает в общий токен-строку"""
+    
+    raise_syntax_error = False
+    if not values[0].startswith("("):
+        raise_syntax_error = True
+    if not values[-1].endswith(")"):
+        raise_syntax_error = True
+
+    values[0] = values[0].removeprefix("(")
+    values[-1] = values[-1].removesuffix(")")
+
+    if values[-1].endswith(","):
+        raise_syntax_error = True
+
+    insert_args = convert_arguments(values)
+    
+    for i, insert_arg in enumerate(insert_args[: len(insert_args) - 1]):
+        if not insert_arg.endswith(","):
+            raise_syntax_error = True
+            continue
+        insert_args[i] = insert_arg.removesuffix(",")
+
+    if raise_syntax_error:
+        raise SyntaxError
+
+    return insert_args
+
+def convert_arguments(values):
+    
+    insert_args =[]
+    in_quotes = False
+    open_quote = ""
+    for value in values:
+        if in_quotes:
+            insert_args[-1] += f" {value}"
+            if value.endswith(open_quote) or value.endswith(open_quote + ","):
+                in_quotes = False
+        else:
+            insert_args.append(value)
+            
+            # исключаем случаи когда токен целиком в кавычках
+            if value.startswith(('"', "'")) and not(
+                len(value) >= 2 and value[0] == value.rstrip(',')[-1]
+                ):
+                in_quotes = True
+                open_quote = value[0]
+
+    if in_quotes:
+            raise SyntaxError
+                
+    return insert_args

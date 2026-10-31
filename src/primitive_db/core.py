@@ -1,11 +1,12 @@
-from primitive_db import parser, utils
+from primitive_db import decorators, parser, utils
 from primitive_db.constants import AVAILABLE_TYPES, ID_COLUMN
 
 
+@decorators.handle_db_errors
 def create_table(metadata: dict, table_name: str, columns: list[dict]):
 
     if table_name in metadata:
-        raise ValueError(f'Ошибка: Таблица "{table_name}" уже существует!')
+        raise Exception(f"Таблица \"{table_name}\" уже существует")
 
     errors = []
     need_id = True
@@ -36,13 +37,13 @@ def create_table(metadata: dict, table_name: str, columns: list[dict]):
     return metadata
 
 
+@decorators.handle_db_errors
 def drop_table(metadata: dict, table_name: str) -> dict:
 
     if table_name not in metadata:
-        raise ValueError(utils.table_not_found_error(table_name))
+        raise KeyError(table_name)
 
     metadata.pop(table_name)
-
     return metadata
 
 
@@ -52,12 +53,13 @@ def print_list_of_tables(metadata: dict) -> None:
         print(f"- {key}")
 
 
+@decorators.handle_db_errors
 def insert(
     metadata: dict, table_name: str, table_data: list[dict], values: list
 ) -> list[dict]:
 
     if table_name not in metadata:
-        raise ValueError(utils.table_not_found_error(table_name))
+        raise KeyError(table_name)
 
     table_metadata = metadata[table_name]
     if len(values) != len(table_metadata) - 1:
@@ -68,6 +70,7 @@ def insert(
 
     table_row = {}
     errors = []
+    table_row[ID_COLUMN["name"]] = len(table_data) + 1
     for column_meta, column_value in zip(table_metadata[1:], values):
         try:
             typed_value = parser.convert_value(column_value, column_meta["type"])
@@ -75,7 +78,7 @@ def insert(
             if not exc.args:
                 error_text = (
                     f"Не удалось привести значение {column_value!r} "
-                    "к типу {column_meta['type']!r}"
+                   f"к типу {column_meta['type']!r}"
                 )
             else:
                 error_text = str(exc)
@@ -83,12 +86,11 @@ def insert(
             errors.append(error_text)
             continue
 
-        table_row[column_meta] = typed_value
+        table_row[column_meta["name"]] = typed_value
 
     if errors:
         raise ValueError("\n".join(errors))
 
-    table_row[ID_COLUMN["name"]] = len(table_data) + 1
 
     table_data.append(table_row)
 
@@ -134,10 +136,11 @@ def delete(table_data: list[dict], where_clause: dict) -> list[dict]:
     return table_data
 
 
+@decorators.handle_db_errors
 def print_info(table_name: str, metadata: dict, table_data: list[dict]) -> None:
 
     if table_name not in metadata:
-        raise ValueError(utils.table_not_found_error(table_name))
+        raise KeyError(table_name)
 
     print(f"Таблица: {table_name}")
     columns_pepr = ", ".join(
@@ -145,3 +148,24 @@ def print_info(table_name: str, metadata: dict, table_data: list[dict]) -> None:
     )
     print(f"Стоблцы: {columns_pepr}")
     print(f"Количество записей {len(table_data)}")
+
+
+def create_cacher():
+    cache = {}
+
+    def cache_result(key, value_func):
+        if key in cache:
+            return cache[key]
+        result = value_func()
+        cache[key] = result
+        return result
+
+    cache_result.cache = cache
+    return cache_result  
+
+
+def clear_table_cache(cache:dict, table_name:str):
+    
+    for key in list(cache):
+        if key[0] == table_name:
+            del cache[key]
